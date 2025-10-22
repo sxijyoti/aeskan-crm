@@ -36,6 +36,9 @@ interface Contact {
 const Contacts = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
   const [open, setOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [formData, setFormData] = useState({
@@ -52,12 +55,33 @@ const Contacts = () => {
     fetchContacts();
   }, []);
 
-  const fetchContacts = async () => {
+  // debounce search input
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // fetch when debouncedSearch changes
+  useEffect(() => {
+    fetchContacts(debouncedSearch);
+  }, [debouncedSearch]);
+
+  const fetchContacts = async (q?: string) => {
     try {
-      const { data, error } = await supabase
-        .from("contacts")
-        .select("*")
-        .order("created_at", { ascending: false });
+      setIsSearching(!!q);
+
+      const builder = supabase.from("contacts").select("*");
+
+      if (q && q.length > 0) {
+        // server-side filtering by name, email or phone (case-insensitive)
+        // ilike with %term%
+        const pattern = `%${q}%`;
+        builder.or(
+          `name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern}`
+        );
+      }
+
+      const { data, error } = await builder.order("created_at", { ascending: false });
 
       if (error) throw error;
       setContacts(data || []);
@@ -66,6 +90,7 @@ const Contacts = () => {
       toast.error(message || "Failed to fetch contacts");
     } finally {
       setLoading(false);
+      setIsSearching(false);
     }
   };
 
@@ -164,8 +189,33 @@ const Contacts = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold">Contacts</h2>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex-1">
+          <h2 className="text-3xl font-bold">Contacts</h2>
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              aria-label="Search contacts"
+              className="input input-sm w-full md:w-96 px-3 py-2 rounded-md border bg-card text-foreground"
+              placeholder="Search by name, email or phone..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                type="button"
+                className="text-sm text-muted-foreground hover:text-foreground"
+                onClick={() => setSearch("")}
+                title="Clear search"
+              >
+                Clear
+              </button>
+            )}
+            {isSearching && (
+              <span className="text-sm text-muted-foreground">Searching...</span>
+            )}
+          </div>
+        </div>
+
         <Dialog open={open} onOpenChange={(open) => {
           setOpen(open);
           if (!open) resetForm();

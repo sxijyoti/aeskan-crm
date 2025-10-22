@@ -96,7 +96,7 @@ const ContactProfile = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold">{contact.name}</h2>
         <Button onClick={() => navigate(-1)}>Back</Button>
@@ -107,7 +107,7 @@ const ContactProfile = () => {
           <CardTitle>Contact Details</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <p className="text-sm text-muted-foreground">Email</p>
               <p className="font-medium">{contact.email || "-"}</p>
@@ -132,20 +132,25 @@ const ContactProfile = () => {
           {purchases.length === 0 ? (
             <p className="text-muted-foreground">No purchases found for this contact.</p>
           ) : (
-            <div className="space-y-2">
-              {purchases.map((p) => (
-                <div key={p.id} className="p-3 border rounded-md">
-                  <div className="flex justify-between">
-                    <div>
-                      <p className="font-medium">{p.description || "Purchase"}</p>
-                      <p className="text-sm text-muted-foreground">{p.created_at}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">{p.amount ? `$${p.amount}` : "-"}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full table-auto">
+                <thead>
+                  <tr className="text-sm text-muted-foreground text-left">
+                    <th className="py-2">Item</th>
+                    <th className="py-2">Date</th>
+                    <th className="py-2 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchases.map((p) => (
+                    <tr key={p.id} className="border-t">
+                      <td className="py-3">{p.description || "Purchase"}</td>
+                      <td className="py-3 text-sm text-muted-foreground">{p.created_at}</td>
+                      <td className="py-3 text-right font-semibold">{p.amount ? `$${p.amount.toFixed(2)}` : "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>

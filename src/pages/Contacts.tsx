@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -61,6 +62,7 @@ const Contacts = () => {
   const [errors, setErrors] = useState<{ name?: string; email?: string; phone?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchContacts();
@@ -347,7 +349,7 @@ const Contacts = () => {
               </TableHeader>
               <TableBody>
                 {contacts.map((contact) => (
-                  <TableRow key={contact.id}>
+                  <TableRow key={contact.id} onClick={() => navigate(`/contacts/${contact.id}`)} className="cursor-pointer hover:bg-muted/50">
                     <TableCell className="font-medium">{contact.name}</TableCell>
                     <TableCell>{contact.email || "-"}</TableCell>
                     <TableCell>{contact.phone || "-"}</TableCell>
@@ -356,7 +358,7 @@ const Contacts = () => {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleEdit(contact)}
+                        onClick={(e) => { e.stopPropagation(); handleEdit(contact); }}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -366,7 +368,7 @@ const Contacts = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setDeletingContact(contact)}
+                            onClick={(e) => { e.stopPropagation(); setDeletingContact(contact); }}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>

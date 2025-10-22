@@ -14,6 +14,7 @@ import Purchases from "./pages/Purchases";
 import Reports from "./pages/Reports";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
+import ContactProfile from "./pages/ContactProfile";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,16 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+              <Route
+                path="/contacts/:id"
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <ContactProfile />
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
             <Route
               path="/dashboard/purchases"
               element={

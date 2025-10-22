@@ -1,8 +1,7 @@
 import { ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Building2, Users, LogOut, LayoutDashboard } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   Sidebar,
   SidebarContent,
@@ -14,112 +13,92 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
-const navItems = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Contacts", url: "/dashboard/contacts", icon: Users },
-];
-
-function AppSidebar() {
-  const location = useLocation();
-
-  return (
-    <Sidebar>
-      <SidebarContent>
-        <div className="p-4 flex items-center gap-2 border-b border-sidebar-border">
-          <div className="w-8 h-8 rounded bg-sidebar-primary flex items-center justify-center">
-            <Building2 className="w-4 h-4 text-sidebar-primary-foreground" />
-          </div>
-          <span className="font-semibold text-sidebar-foreground">Aeskan CRM</span>
-        </div>
-        
-        <SidebarGroup>
-          <SidebarGroupLabel>Main Menu</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive = location.pathname === item.url;
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link to={item.url}>
-                        <item.icon className="w-4 h-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-    </Sidebar>
-  );
-}
+import { Users, ShoppingCart, BarChart3, LogOut, Shield } from "lucide-react";
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-const DashboardLayout = ({ children }: DashboardLayoutProps) => {
-  const { user, signOut } = useAuth();
+const menuItems = [
+  { title: "Contacts", url: "/dashboard/contacts", icon: Users },
+  { title: "Purchases", url: "/dashboard/purchases", icon: ShoppingCart },
+  { title: "Reports", url: "/dashboard/reports", icon: BarChart3 },
+];
 
-  const getInitials = (email: string) => {
-    return email.substring(0, 2).toUpperCase();
-  };
+const AppSidebar = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { state } = useSidebar();
+  const { signOut, user, userRole } = useAuth();
+
+  const isActive = (path: string) => location.pathname === path;
 
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-background">
-        <AppSidebar />
+    <Sidebar collapsible="icon">
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-sidebar-primary text-lg font-bold px-4 py-6">
+            Aeskan CRM
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {menuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    onClick={() => navigate(item.url)}
+                    className={isActive(item.url) ? "bg-sidebar-accent" : ""}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.title}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              {userRole === "admin" && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigate("/admin")}
+                    className={isActive("/admin") ? "bg-sidebar-accent" : ""}
+                  >
+                    <Shield className="h-4 w-4" />
+                    <span>Admin</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={signOut}>
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
         
-        <div className="flex-1 flex flex-col">
-          <header className="h-16 border-b border-border flex items-center justify-between px-6 bg-card">
-            <SidebarTrigger />
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                  <Avatar>
-                    <AvatarFallback className="bg-primary text-primary-foreground">
-                      {user?.email ? getInitials(user.email) : "??"}
-                    </AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">Account</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {user?.email}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={signOut}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </header>
-
-          <main className="flex-1 overflow-auto">
-            {children}
-          </main>
+        <div className="mt-auto p-4 border-t border-sidebar-border">
+          <p className="text-xs text-sidebar-foreground/70">{user?.email}</p>
+          <p className="text-xs text-sidebar-primary capitalize mt-1">{userRole}</p>
         </div>
+      </SidebarContent>
+    </Sidebar>
+  );
+};
+
+const DashboardLayout = ({ children }: DashboardLayoutProps) => {
+  return (
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full bg-muted/30">
+        <AppSidebar />
+        <main className="flex-1 flex flex-col">
+          <header className="h-16 border-b bg-card flex items-center px-6 sticky top-0 z-10">
+            <SidebarTrigger />
+            <h1 className="ml-4 text-xl font-semibold text-foreground">Dashboard</h1>
+          </header>
+          <div className="flex-1 p-6">
+            {children}
+          </div>
+        </main>
       </div>
     </SidebarProvider>
   );

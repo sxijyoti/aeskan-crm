@@ -1,51 +1,54 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
-import DashboardLayout from "@/components/DashboardLayout";
-import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import ContactList from "@/components/ContactList";
-import ContactForm from "@/components/ContactForm";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Plus, Edit, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
-export interface Contact {
+interface Contact {
   id: string;
   name: string;
   email: string | null;
   phone: string | null;
   address: string | null;
   created_at: string;
-  updated_at: string;
 }
 
 const Contacts = () => {
-  const { user, loading: authLoading } = useAuth();
-  const navigate = useNavigate();
-  const { toast } = useToast();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+  });
+  const { user } = useAuth();
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/auth");
-    }
-  }, [user, authLoading, navigate]);
-
-  useEffect(() => {
-    if (user) {
-      fetchContacts();
-    }
-  }, [user]);
+    fetchContacts();
+  }, []);
 
   const fetchContacts = async () => {
     try {
@@ -57,134 +60,94 @@ const Contacts = () => {
       if (error) throw error;
       setContacts(data || []);
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Failed to fetch contacts");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateContact = async (data: Omit<Contact, "id" | "created_at" | "updated_at">) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
     try {
-      const { error } = await supabase.from("contacts").insert({
-        ...data,
-        user_id: user!.id,
-      });
+      if (editingContact) {
+        const { error } = await supabase
+          .from("contacts")
+          .update(formData)
+          .eq("id", editingContact.id);
 
-      if (error) throw error;
+        if (error) throw error;
+        toast.success("Contact updated successfully");
+      } else {
+        const { error } = await supabase
+          .from("contacts")
+          .insert([{ ...formData, user_id: user?.id }]);
 
-      toast({
-        title: "Success",
-        description: "Contact created successfully",
-      });
-      
-      setIsDialogOpen(false);
-      fetchContacts();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
+        if (error) throw error;
+        toast.success("Contact created successfully");
+      }
 
-  const handleUpdateContact = async (id: string, data: Omit<Contact, "id" | "created_at" | "updated_at">) => {
-    try {
-      const { error } = await supabase
-        .from("contacts")
-        .update(data)
-        .eq("id", id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Contact updated successfully",
-      });
-      
-      setIsDialogOpen(false);
+      setOpen(false);
       setEditingContact(null);
+      setFormData({ name: "", email: "", phone: "", address: "" });
       fetchContacts();
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleDeleteContact = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from("contacts")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Contact deleted successfully",
-      });
-      
-      fetchContacts();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error(error.message || "Failed to save contact");
     }
   };
 
   const handleEdit = (contact: Contact) => {
     setEditingContact(contact);
-    setIsDialogOpen(true);
+    setFormData({
+      name: contact.name,
+      email: contact.email || "",
+      phone: contact.phone || "",
+      address: contact.address || "",
+    });
+    setOpen(true);
   };
 
-  const handleCloseDialog = () => {
-    setIsDialogOpen(false);
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this contact?")) return;
+
+    try {
+      const { error } = await supabase.from("contacts").delete().eq("id", id);
+
+      if (error) throw error;
+      toast.success("Contact deleted successfully");
+      fetchContacts();
+    } catch (error: any) {
+      toast.error("Failed to delete contact");
+    }
+  };
+
+  const resetForm = () => {
     setEditingContact(null);
+    setFormData({ name: "", email: "", phone: "", address: "" });
   };
 
-  if (authLoading || loading) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
 
-  if (!user) {
-    return null;
-  }
-
   return (
-    <DashboardLayout>
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Contacts</h1>
-            <p className="text-muted-foreground">Manage your customer relationships</p>
-          </div>
-          <Button onClick={() => setIsDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Contact
-          </Button>
-        </div>
-
-        <ContactList
-          contacts={contacts}
-          onEdit={handleEdit}
-          onDelete={handleDeleteContact}
-        />
-
-        <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-bold">Contacts</h2>
+        <Dialog open={open} onOpenChange={(open) => {
+          setOpen(open);
+          if (!open) resetForm();
+        }}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Contact
+            </Button>
+          </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
@@ -192,19 +155,112 @@ const Contacts = () => {
               </DialogTitle>
               <DialogDescription>
                 {editingContact
-                  ? "Update the contact information below"
-                  : "Enter the contact details below"}
+                  ? "Update the contact information below."
+                  : "Fill in the contact information below."}
               </DialogDescription>
             </DialogHeader>
-            <ContactForm
-              contact={editingContact}
-              onSubmit={editingContact ? handleUpdateContact : handleCreateContact}
-              onCancel={handleCloseDialog}
-            />
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Address</Label>
+                <Input
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) =>
+                    setFormData({ ...formData, address: e.target.value })
+                  }
+                />
+              </div>
+              <Button type="submit" className="w-full">
+                {editingContact ? "Update Contact" : "Add Contact"}
+              </Button>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
-    </DashboardLayout>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>All Contacts</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {contacts.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">
+              No contacts yet. Add your first contact to get started.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Address</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {contacts.map((contact) => (
+                  <TableRow key={contact.id}>
+                    <TableCell className="font-medium">{contact.name}</TableCell>
+                    <TableCell>{contact.email || "-"}</TableCell>
+                    <TableCell>{contact.phone || "-"}</TableCell>
+                    <TableCell>{contact.address || "-"}</TableCell>
+                    <TableCell className="text-right space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEdit(contact)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(contact.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 

@@ -22,6 +22,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 interface Contact {
@@ -41,6 +51,7 @@ const Contacts = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [open, setOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [deletingContact, setDeletingContact] = useState<Contact | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -160,8 +171,6 @@ const Contacts = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this contact?")) return;
-
     try {
       const { error } = await supabase.from("contacts").delete().eq("id", id);
 
@@ -171,6 +180,8 @@ const Contacts = () => {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(message || "Failed to delete contact");
+    } finally {
+      setDeletingContact(null);
     }
   };
 
@@ -349,13 +360,35 @@ const Contacts = () => {
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(contact.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+
+                      <AlertDialog open={!!deletingContact}>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeletingContact(contact)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete contact</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete <strong>{contact.name}</strong>?
+                              This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <div className="flex justify-end gap-2 mt-4">
+                            <AlertDialogCancel onClick={() => setDeletingContact(null)}>
+                              Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(contact.id)}>
+                              Delete
+                            </AlertDialogAction>
+                          </div>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -44,6 +44,8 @@ const Contacts = () => {
     phone: "",
     address: "",
   });
+  const [errors, setErrors] = useState<{ name?: string; email?: string; phone?: string }>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -59,8 +61,9 @@ const Contacts = () => {
 
       if (error) throw error;
       setContacts(data || []);
-    } catch (error: any) {
-      toast.error("Failed to fetch contacts");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(message || "Failed to fetch contacts");
     } finally {
       setLoading(false);
     }
@@ -68,12 +71,33 @@ const Contacts = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // basic client-side validation
+    setErrors({});
+    const newErrors: { name?: string; email?: string; phone?: string } = {};
+    if (!formData.name.trim()) newErrors.name = "Name is required.";
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Enter a valid email address.";
+    }
+    if (formData.phone && !/^[0-9()+\-\s]+$/.test(formData.phone)) {
+      newErrors.phone = "Phone contains invalid characters.";
+    }
 
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    if (!user) {
+      toast.error("You must be signed in to add a contact.");
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       if (editingContact) {
         const { error } = await supabase
           .from("contacts")
-          .update(formData)
+          .update(formData as Record<string, unknown>)
           .eq("id", editingContact.id);
 
         if (error) throw error;
@@ -81,7 +105,7 @@ const Contacts = () => {
       } else {
         const { error } = await supabase
           .from("contacts")
-          .insert([{ ...formData, user_id: user?.id }]);
+          .insert([{ ...formData, user_id: user.id }]);
 
         if (error) throw error;
         toast.success("Contact created successfully");
@@ -91,8 +115,11 @@ const Contacts = () => {
       setEditingContact(null);
       setFormData({ name: "", email: "", phone: "", address: "" });
       fetchContacts();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to save contact");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(message || "Failed to save contact");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -116,8 +143,9 @@ const Contacts = () => {
       if (error) throw error;
       toast.success("Contact deleted successfully");
       fetchContacts();
-    } catch (error: any) {
-      toast.error("Failed to delete contact");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(message || "Failed to delete contact");
     }
   };
 
@@ -160,50 +188,76 @@ const Contacts = () => {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  required
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                    required
+                    aria-invalid={!!errors.name}
+                  />
+                  {errors.name && (
+                    <p className="text-sm text-destructive mt-1">{errors.name}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    aria-invalid={!!errors.email}
+                  />
+                  {errors.email && (
+                    <p className="text-sm text-destructive mt-1">{errors.email}</p>
+                  )}
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) =>
+                      setFormData({ ...formData, phone: e.target.value })
+                    }
+                    aria-invalid={!!errors.phone}
+                  />
+                  {errors.phone && (
+                    <p className="text-sm text-destructive mt-1">{errors.phone}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="address">Address</Label>
+                  <Input
+                    id="address"
+                    value={formData.address}
+                    onChange={(e) =>
+                      setFormData({ ...formData, address: e.target.value })
+                    }
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
-                  }
-                />
-              </div>
-              <Button type="submit" className="w-full">
-                {editingContact ? "Update Contact" : "Add Contact"}
+
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting
+                  ? editingContact
+                    ? "Updating..."
+                    : "Adding..."
+                  : editingContact
+                  ? "Update Contact"
+                  : "Add Contact"}
               </Button>
             </form>
           </DialogContent>

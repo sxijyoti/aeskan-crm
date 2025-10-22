@@ -104,7 +104,7 @@ jobs:
 
       - name: Vercel — Deploy Preview
         if: github.ref != 'refs/heads/main'
-        uses: amondnet/vercel-action@latest
+        uses: amondnet/vercel-action@v41.1.4
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
@@ -118,7 +118,7 @@ jobs:
 
       - name: Vercel — Deploy Production
         if: github.ref == 'refs/heads/main'
-        uses: amondnet/vercel-action@v21
+        uses: amondnet/vercel-action@v41.1.4
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}

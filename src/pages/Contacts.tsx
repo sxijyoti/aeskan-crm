@@ -22,6 +22,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 interface Contact {
@@ -36,44 +47,95 @@ interface Contact {
 const Contacts = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
   const [open, setOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [deletingContact, setDeletingContact] = useState<Contact | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
     address: "",
   });
+  const [errors, setErrors] = useState<{ name?: string; email?: string; phone?: string }>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchContacts();
   }, []);
 
-  const fetchContacts = async () => {
+  // debounce search input
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // fetch when debouncedSearch changes
+  useEffect(() => {
+    fetchContacts(debouncedSearch);
+  }, [debouncedSearch]);
+
+  const fetchContacts = async (q?: string) => {
     try {
-      const { data, error } = await supabase
-        .from("contacts")
-        .select("*")
-        .order("created_at", { ascending: false });
+      setIsSearching(!!q);
+
+      const builder = supabase.from("contacts").select("*");
+
+      if (q && q.length > 0) {
+        // server-side filtering by name, email or phone (case-insensitive)
+        // ilike with %term%
+        const pattern = `%${q}%`;
+        builder.or(
+          `name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern}`
+        );
+      }
+
+      const { data, error } = await builder.order("created_at", { ascending: false });
 
       if (error) throw error;
       setContacts(data || []);
-    } catch (error: any) {
-      toast.error("Failed to fetch contacts");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(message || "Failed to fetch contacts");
     } finally {
       setLoading(false);
+      setIsSearching(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // basic client-side validation
+    setErrors({});
+    const newErrors: { name?: string; email?: string; phone?: string } = {};
+    if (!formData.name.trim()) newErrors.name = "Name is required.";
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Enter a valid email address.";
+    }
+    if (formData.phone && !/^[0-9()+\-\s]+$/.test(formData.phone)) {
+      newErrors.phone = "Phone contains invalid characters.";
+    }
 
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    if (!user) {
+      toast.error("You must be signed in to add a contact.");
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       if (editingContact) {
         const { error } = await supabase
           .from("contacts")
-          .update(formData)
+          .update(formData as Record<string, unknown>)
           .eq("id", editingContact.id);
 
         if (error) throw error;
@@ -81,7 +143,7 @@ const Contacts = () => {
       } else {
         const { error } = await supabase
           .from("contacts")
-          .insert([{ ...formData, user_id: user?.id }]);
+          .insert([{ ...formData, user_id: user.id }]);
 
         if (error) throw error;
         toast.success("Contact created successfully");
@@ -91,8 +153,11 @@ const Contacts = () => {
       setEditingContact(null);
       setFormData({ name: "", email: "", phone: "", address: "" });
       fetchContacts();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to save contact");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(message || "Failed to save contact");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -108,16 +173,17 @@ const Contacts = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this contact?")) return;
-
     try {
       const { error } = await supabase.from("contacts").delete().eq("id", id);
 
       if (error) throw error;
       toast.success("Contact deleted successfully");
       fetchContacts();
-    } catch (error: any) {
-      toast.error("Failed to delete contact");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(message || "Failed to delete contact");
+    } finally {
+      setDeletingContact(null);
     }
   };
 
@@ -136,8 +202,33 @@ const Contacts = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold">Contacts</h2>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex-1">
+          <h2 className="text-3xl font-bold">Contacts</h2>
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              aria-label="Search contacts"
+              className="input input-sm w-full md:w-96 px-3 py-2 rounded-md border bg-card text-foreground"
+              placeholder="Search by name, email or phone..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                type="button"
+                className="text-sm text-muted-foreground hover:text-foreground"
+                onClick={() => setSearch("")}
+                title="Clear search"
+              >
+                Clear
+              </button>
+            )}
+            {isSearching && (
+              <span className="text-sm text-muted-foreground">Searching...</span>
+            )}
+          </div>
+        </div>
+
         <Dialog open={open} onOpenChange={(open) => {
           setOpen(open);
           if (!open) resetForm();
@@ -160,50 +251,76 @@ const Contacts = () => {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  required
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                    required
+                    aria-invalid={!!errors.name}
+                  />
+                  {errors.name && (
+                    <p className="text-sm text-destructive mt-1">{errors.name}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    aria-invalid={!!errors.email}
+                  />
+                  {errors.email && (
+                    <p className="text-sm text-destructive mt-1">{errors.email}</p>
+                  )}
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) =>
+                      setFormData({ ...formData, phone: e.target.value })
+                    }
+                    aria-invalid={!!errors.phone}
+                  />
+                  {errors.phone && (
+                    <p className="text-sm text-destructive mt-1">{errors.phone}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="address">Address</Label>
+                  <Input
+                    id="address"
+                    value={formData.address}
+                    onChange={(e) =>
+                      setFormData({ ...formData, address: e.target.value })
+                    }
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
-                  }
-                />
-              </div>
-              <Button type="submit" className="w-full">
-                {editingContact ? "Update Contact" : "Add Contact"}
+
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting
+                  ? editingContact
+                    ? "Updating..."
+                    : "Adding..."
+                  : editingContact
+                  ? "Update Contact"
+                  : "Add Contact"}
               </Button>
             </form>
           </DialogContent>
@@ -232,7 +349,7 @@ const Contacts = () => {
               </TableHeader>
               <TableBody>
                 {contacts.map((contact) => (
-                  <TableRow key={contact.id}>
+                  <TableRow key={contact.id} onClick={() => navigate(`/contacts/${contact.id}`)} className="cursor-pointer hover:bg-muted/50">
                     <TableCell className="font-medium">{contact.name}</TableCell>
                     <TableCell>{contact.email || "-"}</TableCell>
                     <TableCell>{contact.phone || "-"}</TableCell>
@@ -241,17 +358,39 @@ const Contacts = () => {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleEdit(contact)}
+                        onClick={(e) => { e.stopPropagation(); handleEdit(contact); }}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(contact.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+
+                      <AlertDialog open={!!deletingContact}>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => { e.stopPropagation(); setDeletingContact(contact); }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete contact</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete <strong>{contact.name}</strong>?
+                              This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <div className="flex justify-end gap-2 mt-4">
+                            <AlertDialogCancel onClick={() => setDeletingContact(null)}>
+                              Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(contact.id)}>
+                              Delete
+                            </AlertDialogAction>
+                          </div>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>
                 ))}

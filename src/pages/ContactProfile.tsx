@@ -28,11 +28,13 @@ const ContactProfile = () => {
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [totalSpend, setTotalSpend] = useState<number | null>(null);
 
   useEffect(() => {
     if (!id) return;
     fetchContact(id);
     fetchPurchases(id);
+    fetchTotalSpend(id);
   }, [id]);
 
   const fetchContact = async (contactId: string) => {
@@ -71,10 +73,51 @@ const ContactProfile = () => {
         return;
       }
 
-      setPurchases(data || []);
+      const rows = data || [];
+      setPurchases(rows);
+
+      // compute total spend locally as a fallback and reliable method
+      try {
+        const total = (rows as any[]).reduce((acc, r) => acc + Number(r.amount ?? 0), 0);
+        setTotalSpend(Number.isFinite(total) ? total : 0);
+      } catch (err) {
+        // if local sum fails, leave totalSpend untouched (fetchTotalSpend will attempt server-side)
+        console.warn("Could not compute total locally:", err);
+      }
     } catch (error: unknown) {
       console.warn(error);
       setPurchases([]);
+    }
+  };
+
+  const fetchTotalSpend = async (contactId: string) => {
+    try {
+      // aggregate sum(amount) for this contact
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as unknown as any)
+        .from("purchases")
+        .select("sum(amount)")
+        .eq("contact_id", contactId);
+
+      if (error) {
+        // table might not exist
+        console.warn("Could not fetch total spend:", error);
+        setTotalSpend(null);
+        return;
+      }
+
+      // data is usually an array with a single object like { sum: "123.45" } or { sum: null }
+      const sumRow = Array.isArray(data) && data.length > 0 ? data[0] : null;
+      // sum may be returned as { sum: '123.45' } or similar; be defensive
+      let raw: unknown = null;
+      if (sumRow) {
+        raw = (sumRow as any).sum ?? Object.values(sumRow)[0];
+      }
+      const value = raw == null ? 0 : Number(raw);
+      setTotalSpend(Number.isFinite(value) ? value : 0);
+    } catch (err) {
+      console.warn(err);
+      setTotalSpend(null);
     }
   };
 
@@ -119,6 +162,26 @@ const ContactProfile = () => {
             <div className="md:col-span-2">
               <p className="text-sm text-muted-foreground">Address</p>
               <p className="font-medium">{contact.address || "-"}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Total Spend</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">All-time total</p>
+              <p className="text-2xl font-bold">
+                {totalSpend == null ? (
+                  <span className="text-muted-foreground">Unavailable</span>
+                ) : (
+                  <span className="text-primary">${totalSpend.toFixed(2)}</span>
+                )}
+              </p>
             </div>
           </div>
         </CardContent>

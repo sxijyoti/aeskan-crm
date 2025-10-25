@@ -4,18 +4,15 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
-import ProtectedRoute from "@/components/ProtectedRoute";
-import DashboardLayout from "@/components/DashboardLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Contacts from "./pages/Contacts";
 import Purchases from "./pages/Purchases";
-import Reports from "./pages/Reports";
-import Admin from "./pages/Admin";
-import VoucherRules from "./pages/VoucherRules";
+import CompanyUsersPage from "./pages/CompanyUsers";
+import VoucherRulesPage from "./pages/VoucherRules";
 import NotFound from "./pages/NotFound";
-import ContactProfile from "./pages/ContactProfile";
+import ReportsPage from "./pages/Reports";
 
 const queryClient = new QueryClient();
 
@@ -29,86 +26,12 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Dashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/dashboard/contacts"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Contacts />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-              <Route
-                path="/contacts/:id"
-                element={
-                  <ProtectedRoute>
-                    <DashboardLayout>
-                      <ContactProfile />
-                    </DashboardLayout>
-                  </ProtectedRoute>
-                }
-              />
-            <Route
-              path="/dashboard/purchases"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Purchases />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/dashboard/reports"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Reports />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <DashboardLayout>
-                    <Admin />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/reports"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <DashboardLayout>
-                    <Reports />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/voucher-rules"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <DashboardLayout>
-                    <VoucherRules />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/contacts" element={<Contacts />} />
+            <Route path="/purchases" element={<Purchases />} />
+            <Route path="/company/users" element={<CompanyUsersPage />} />
+            <Route path="/vouchers" element={<VoucherRulesPage />} />
+             <Route path="/reports" element={<ReportsPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

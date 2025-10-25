@@ -185,7 +185,10 @@ const Purchases = () => {
     }
   };
 
-  const formatCurrency = (v?: number) => (v != null ? `$${v.toFixed(2)}` : "-");
+  const formatCurrency = (v?: number) =>
+    v != null
+      ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(v)
+      : "-";
   const formatDate = (d?: string) => (d ? new Date(d).toLocaleDateString() : "-");
 
   const handleEdit = (p: Purchase) => {

@@ -18,8 +18,10 @@ interface Purchase {
   id: string;
   contact_id?: string;
   amount?: number;
+  item?: string;
   description?: string;
-  created_at?: string;
+  date?: string; // purchase date field (date)
+  created_at?: string; // timestamptz when the row was created
 }
 
 const ContactProfile = () => {
@@ -29,6 +31,23 @@ const ContactProfile = () => {
   const [loading, setLoading] = useState(true);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [totalSpend, setTotalSpend] = useState<number | null>(null);
+
+  const formatCurrency = (v?: number | null) =>
+    v != null
+      ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(v)
+      : "-";
+
+  const formatDate = (d?: string | null) => {
+    if (!d) return "-";
+    try {
+      // prefer date-only values, but handle ISO timestamps too
+      const dt = new Date(d);
+      if (Number.isNaN(dt.getTime())) return String(d);
+      return dt.toLocaleDateString("en-IN");
+    } catch (err) {
+      return String(d);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -100,9 +119,8 @@ const ContactProfile = () => {
         .eq("contact_id", contactId);
 
       if (error) {
-        // table might not exist
+        // table might not exist or the aggregate failed — don't overwrite local total
         console.warn("Could not fetch total spend:", error);
-        setTotalSpend(null);
         return;
       }
 
@@ -114,10 +132,13 @@ const ContactProfile = () => {
         raw = (sumRow as any).sum ?? Object.values(sumRow)[0];
       }
       const value = raw == null ? 0 : Number(raw);
-      setTotalSpend(Number.isFinite(value) ? value : 0);
+      if (Number.isFinite(value)) {
+        setTotalSpend(value);
+      }
     } catch (err) {
       console.warn(err);
-      setTotalSpend(null);
+      // don't overwrite local total on unexpected errors
+      return;
     }
   };
 
@@ -179,7 +200,7 @@ const ContactProfile = () => {
                 {totalSpend == null ? (
                   <span className="text-muted-foreground">Unavailable</span>
                 ) : (
-                  <span className="text-primary">${totalSpend.toFixed(2)}</span>
+                  <span className="text-primary">{formatCurrency(totalSpend)}</span>
                 )}
               </p>
             </div>
@@ -207,9 +228,9 @@ const ContactProfile = () => {
                 <tbody>
                   {purchases.map((p) => (
                     <tr key={p.id} className="border-t">
-                      <td className="py-3">{p.description || "Purchase"}</td>
-                      <td className="py-3 text-sm text-muted-foreground">{p.created_at}</td>
-                      <td className="py-3 text-right font-semibold">{p.amount ? `$${p.amount.toFixed(2)}` : "-"}</td>
+                      <td className="py-3">{p.item || p.description || "Purchase"}</td>
+                      <td className="py-3 text-sm text-muted-foreground">{formatDate(p.date ?? p.created_at)}</td>
+                      <td className="py-3 text-right font-semibold">{formatCurrency(p.amount)}</td>
                     </tr>
                   ))}
                 </tbody>

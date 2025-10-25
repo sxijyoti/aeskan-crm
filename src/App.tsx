@@ -13,6 +13,7 @@ import Contacts from "./pages/Contacts";
 import Purchases from "./pages/Purchases";
 import Reports from "./pages/Reports";
 import Admin from "./pages/Admin";
+import VoucherRules from "./pages/VoucherRules";
 import NotFound from "./pages/NotFound";
 import ContactProfile from "./pages/ContactProfile";
 
@@ -84,6 +85,16 @@ const App = () => (
                 <ProtectedRoute requireAdmin>
                   <DashboardLayout>
                     <Admin />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/voucher-rules"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <DashboardLayout>
+                    <VoucherRules />
                   </DashboardLayout>
                 </ProtectedRoute>
               }

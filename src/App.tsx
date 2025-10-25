@@ -90,6 +90,16 @@ const App = () => (
               }
             />
             <Route
+              path="/reports"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <DashboardLayout>
+                    <Reports />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/voucher-rules"
               element={
                 <ProtectedRoute requireAdmin>

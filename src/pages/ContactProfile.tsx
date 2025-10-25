@@ -4,6 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Contact {
   id: string;
@@ -24,6 +30,16 @@ interface Purchase {
   created_at?: string; // timestamptz when the row was created
 }
 
+interface Voucher {
+  id: string;
+  contact_id?: string;
+  rule_id?: string;
+  issued_at?: string;
+  status?: string;
+  metadata?: { code?: string } | null;
+  rule_name?: string | null;
+}
+
 const ContactProfile = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -31,6 +47,24 @@ const ContactProfile = () => {
   const [loading, setLoading] = useState(true);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [totalSpend, setTotalSpend] = useState<number | null>(null);
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  const [editingVoucher, setEditingVoucher] = useState<Voucher | null>(null);
+  const [editCode, setEditCode] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+
+  const [editStatus, setEditStatus] = useState<string>("issued");
+  const [editIssuedAt, setEditIssuedAt] = useState<string>("");
+  const [editRuleId, setEditRuleId] = useState<string | undefined>(undefined);
+  const [rulesList, setRulesList] = useState<Array<{ id: string; rule_name: string; metadata?: any }>>([]);
+
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertVoucher, setAlertVoucher] = useState<Voucher | null>(null);
+  const [alertAction, setAlertAction] = useState<"delete" | "redeem" | null>(null);
+  // admin-only issue voucher from profile
+  const [issueOpen, setIssueOpen] = useState(false);
+  const [issueRuleId, setIssueRuleId] = useState<string | undefined>(undefined);
+  const [issueCode, setIssueCode] = useState("");
+  const [isIssuing, setIsIssuing] = useState(false);
 
   const formatCurrency = (v?: number | null) =>
     v != null
@@ -54,7 +88,10 @@ const ContactProfile = () => {
     fetchContact(id);
     fetchPurchases(id);
     fetchTotalSpend(id);
+    fetchVouchers(id);
   }, [id]);
+
+  const { userRole } = useAuth();
 
   const fetchContact = async (contactId: string) => {
     try {
@@ -108,6 +145,181 @@ const ContactProfile = () => {
       setPurchases([]);
     }
   };
+
+  const fetchVouchers = async (contactId: string) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as unknown as any)
+        .from("vouchers")
+        .select("*")
+        .eq("contact_id", contactId)
+        .order("issued_at", { ascending: false });
+
+      if (error) {
+        console.warn("Could not load vouchers: ", error);
+        setVouchers([]);
+        return;
+      }
+
+      const rows = (data || []) as any[];
+
+      // Collect rule ids and fetch rule names in a single query for display
+      const ruleIds = Array.from(new Set(rows.map((r) => r.rule_id).filter(Boolean)));
+      let ruleMap: Record<string, { rule_name?: string; metadata?: any }> = {};
+      if (ruleIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: rulesData, error: rulesError } = await (supabase as unknown as any)
+          .from("voucher_rules")
+          .select("id, rule_name, metadata")
+          .in("id", ruleIds);
+        if (!rulesError && Array.isArray(rulesData)) {
+          ruleMap = (rulesData as any[]).reduce((acc, r) => {
+            acc[r.id] = { rule_name: r.rule_name, metadata: r.metadata };
+            return acc;
+          }, {} as Record<string, any>);
+        }
+      }
+
+      const mapped: Voucher[] = rows.map((r) => ({
+        id: r.id,
+        contact_id: r.contact_id,
+        rule_id: r.rule_id,
+        issued_at: r.issued_at || r.created_at,
+        status: r.status,
+        metadata: r.metadata,
+        rule_name: r.rule_id ? ruleMap[r.rule_id]?.rule_name : null,
+      }));
+
+      setVouchers(mapped);
+    } catch (err) {
+      console.warn(err);
+      setVouchers([]);
+    }
+  };
+
+  const handleDeleteVoucher = async (voucherId?: string) => {
+    if (!voucherId) return setAlertOpen(false);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as unknown as any).from("vouchers").delete().eq("id", voucherId);
+      if (error) throw error;
+      toast.success("Voucher deleted");
+      setAlertOpen(false);
+      if (id) fetchVouchers(id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(message || "Failed to delete voucher");
+    }
+  };
+
+  const handleRedeemVoucher = async (voucherId?: string) => {
+    if (!voucherId) return setAlertOpen(false);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as unknown as any).from("vouchers").update({ status: "redeemed" }).eq("id", voucherId);
+      if (error) throw error;
+      toast.success("Voucher marked redeemed");
+      setAlertOpen(false);
+      if (id) fetchVouchers(id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(message || "Failed to redeem voucher");
+    }
+  };
+
+  const openEditDialog = (voucher: Voucher) => {
+    setEditingVoucher(voucher);
+    setEditCode(voucher.metadata?.code || "");
+    setEditStatus(voucher.status || "issued");
+    setEditRuleId(voucher.rule_id || undefined);
+    // normalize issued_at to datetime-local value or empty
+    try {
+      const dt = voucher.issued_at ? new Date(voucher.issued_at) : new Date();
+      // datetime-local expects yyyy-mm-ddThh:MM
+      setEditIssuedAt(new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+    } catch (err) {
+      setEditIssuedAt("");
+    }
+    setEditOpen(true);
+  };
+
+  const saveEditDialog = async () => {
+    if (!editingVoucher) return setEditOpen(false);
+    try {
+      const payload: any = {
+        metadata: editCode ? { code: editCode } : null,
+        status: editStatus,
+      };
+      if (editRuleId) payload.rule_id = editRuleId;
+      if (editIssuedAt) {
+        // convert local datetime-local value to ISO
+        const iso = new Date(editIssuedAt).toISOString();
+        payload.issued_at = iso;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as unknown as any)
+        .from("vouchers")
+        .update(payload)
+        .eq("id", editingVoucher.id);
+      if (error) throw error;
+      toast.success("Voucher updated");
+      setEditOpen(false);
+      if (id) fetchVouchers(id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(message || "Failed to update voucher");
+    }
+  };
+
+  const handleIssueFromProfile = async () => {
+    if (!id) return toast.error("Missing contact id");
+    if (!issueRuleId) return toast.error("Please select a voucher rule");
+    setIsIssuing(true);
+    try {
+      const payload: any = {
+        contact_id: id,
+        rule_id: issueRuleId,
+        status: "issued",
+        metadata: issueCode ? { code: issueCode } : null,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as unknown as any).from("vouchers").insert([payload]);
+      if (error) throw error;
+      toast.success("Voucher Issued Successfully");
+      setIssueOpen(false);
+      setIssueRuleId(undefined);
+      setIssueCode("");
+      fetchVouchers(id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(message || "Failed to issue voucher");
+    } finally {
+      setIsIssuing(false);
+    }
+  };
+
+  const fetchVoucherRules = async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as unknown as any).from("voucher_rules").select("id, rule_name, metadata").order("created_at", { ascending: false });
+      if (error) throw error;
+      setRulesList((data || []) as any);
+    } catch (err) {
+      console.warn("Failed to load voucher rules for edit dialog", err);
+    }
+  };
+
+  // load voucher rules for the edit dialog
+  useEffect(() => {
+    fetchVoucherRules();
+  }, []);
+
+  // when rule is selected in issue dialog, prefill code if available
+  useEffect(() => {
+    if (!issueRuleId) return setIssueCode("");
+    const r = rulesList.find((x) => x.id === issueRuleId);
+    setIssueCode((r && (r.metadata as any)?.code) || "");
+  }, [issueRuleId, rulesList]);
 
   const fetchTotalSpend = async (contactId: string) => {
     try {
@@ -163,7 +375,12 @@ const ContactProfile = () => {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold">{contact.name}</h2>
-        <Button onClick={() => navigate(-1)}>Back</Button>
+        <div className="flex items-center gap-2">
+          {userRole === "admin" && (
+            <Button onClick={() => setIssueOpen(true)}>+ Issue Voucher</Button>
+          )}
+          <Button onClick={() => navigate(-1)}>Back</Button>
+        </div>
       </div>
 
       <Card>
@@ -239,6 +456,149 @@ const ContactProfile = () => {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Issued Vouchers</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {vouchers.length === 0 ? (
+            <p className="text-muted-foreground">No vouchers issued to this contact.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full table-auto">
+                <thead>
+                  <tr className="text-sm text-muted-foreground text-left">
+                    <th className="py-2">Code</th>
+                    <th className="py-2">Rule</th>
+                    <th className="py-2">Issued</th>
+                    <th className="py-2 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vouchers.map((v) => (
+                    <tr key={v.id} className="border-t">
+                      <td className="py-3">{v.metadata?.code || "-"}</td>
+                      <td className="py-3 font-medium">{v.rule_name || "-"}</td>
+                      <td className="py-3 text-sm text-muted-foreground">{formatDate(v.issued_at)}</td>
+                      <td className="py-3 text-right font-semibold">{v.status || "-"}</td>
+                      <td className="py-3 text-right">
+                        <div className="inline-flex items-center gap-2 justify-end">
+                          {userRole === "admin" && (
+                            <Button size="sm" variant="ghost" onClick={() => openEditDialog(v)}>
+                              Edit
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => { setAlertVoucher(v); setAlertAction('redeem'); setAlertOpen(true); }}>
+                            Redeem
+                          </Button>
+                          {userRole === "admin" && (
+                            <Button size="sm" variant="ghost" onClick={() => { setAlertVoucher(v); setAlertAction('delete'); setAlertOpen(true); }}>
+                              Delete
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Voucher Code</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Label>Code</Label>
+            <Input value={editCode} onChange={(e) => setEditCode(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <div className="flex w-full justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={saveEditDialog}>Save</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Alert for Redeem/Delete */}
+      <AlertDialog open={alertOpen} onOpenChange={setAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {alertAction === "delete" ? "Delete voucher?" : "Redeem voucher?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {alertAction === "delete"
+                ? "This will permanently delete the voucher. This action cannot be undone."
+                : "Mark this voucher as redeemed?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex justify-end gap-2">
+            <AlertDialogCancel asChild>
+              <Button variant="outline">Cancel</Button>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button
+                onClick={() => {
+                  if (!alertVoucher) return setAlertOpen(false);
+                  if (alertAction === "delete") handleDeleteVoucher(alertVoucher.id);
+                  else if (alertAction === "redeem") handleRedeemVoucher(alertVoucher.id);
+                }}
+              >
+                {alertAction === "delete" ? "Delete" : "Confirm"}
+              </Button>
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* Issue Voucher Dialog (admin only) */}
+      <Dialog open={issueOpen} onOpenChange={setIssueOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Issue Voucher</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Voucher Rule</Label>
+              <Select value={issueRuleId} onValueChange={(v) => setIssueRuleId(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select rule" />
+                </SelectTrigger>
+                <SelectContent>
+                  {rulesList.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.rule_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Code (optional)</Label>
+              <Input value={issueCode} onChange={(e) => setIssueCode(e.target.value)} placeholder="e.g. WELCOME10" />
+            </div>
+          </div>
+          <DialogFooter>
+            <div className="flex w-full justify-end gap-2">
+              <Button variant="outline" onClick={() => setIssueOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleIssueFromProfile} disabled={isIssuing}>
+                {isIssuing ? "Issuing..." : "Issue Voucher"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

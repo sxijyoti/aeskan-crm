@@ -349,7 +349,15 @@ const Contacts = () => {
               </TableHeader>
               <TableBody>
                 {contacts.map((contact) => (
-                  <TableRow key={contact.id} onClick={() => navigate(`/contacts/${contact.id}`)} className="cursor-pointer hover:bg-muted/50">
+                  <TableRow
+                    key={contact.id}
+                    onClick={() => {
+                      // prevent navigating to profile if a delete dialog is open
+                      if (deletingContact) return;
+                      navigate(`/contacts/${contact.id}`);
+                    }}
+                    className="cursor-pointer hover:bg-muted/50"
+                  >
                     <TableCell className="font-medium">{contact.name}</TableCell>
                     <TableCell>{contact.email || "-"}</TableCell>
                     <TableCell>{contact.phone || "-"}</TableCell>
@@ -363,7 +371,7 @@ const Contacts = () => {
                         <Edit className="h-4 w-4" />
                       </Button>
 
-                      <AlertDialog open={!!deletingContact}>
+                      <AlertDialog open={deletingContact?.id === contact.id}>
                         <AlertDialogTrigger asChild>
                           <Button
                             variant="ghost"
@@ -377,15 +385,15 @@ const Contacts = () => {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete contact</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to delete <strong>{contact.name}</strong>?
+                              Are you sure you want to delete <strong>{deletingContact?.id === contact.id ? contact.name : deletingContact?.name}</strong>?
                               This action cannot be undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
-                          <div className="flex justify-end gap-2 mt-4">
-                            <AlertDialogCancel onClick={() => setDeletingContact(null)}>
+                            <div className="flex justify-end gap-2 mt-4">
+                            <AlertDialogCancel onClick={(e) => { e.stopPropagation(); setDeletingContact(null); }}>
                               Cancel
                             </AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(contact.id)}>
+                            <AlertDialogAction onClick={(e) => { e.stopPropagation(); deletingContact && handleDelete(deletingContact.id); }}>
                               Delete
                             </AlertDialogAction>
                           </div>

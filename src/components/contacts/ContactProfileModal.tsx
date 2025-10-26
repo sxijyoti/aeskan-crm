@@ -84,7 +84,7 @@ const ContactProfileModal = ({ open, onOpenChange, contactId }: Props) => {
       setVouchers((vouchersData as Voucher[]) || []);
     } catch (err: unknown) {
       console.error(err);
-      toast.error("Failed to load contact");
+      toast.error("Failed to load customer contact");
     } finally {
       setLoading(false);
     }
@@ -108,7 +108,7 @@ const ContactProfileModal = ({ open, onOpenChange, contactId }: Props) => {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl w-full">
         <DialogHeader>
-          <DialogTitle>{contact ? `Contact — ${contact.name}` : "Contact"}</DialogTitle>
+          <DialogTitle>{contact ? `Customer Contact — ${contact.name}` : "Customer Contact"}</DialogTitle>
         </DialogHeader>
 
         {loading ? (
@@ -143,7 +143,7 @@ const ContactProfileModal = ({ open, onOpenChange, contactId }: Props) => {
                         {purchases.length === 0 && (
                           <tr>
                             <td colSpan={3} className="py-8 text-center text-muted-foreground">
-                              No purchases recorded for this contact.
+                              No purchases recorded for this customer contact.
                             </td>
                           </tr>
                         )}
@@ -157,7 +157,7 @@ const ContactProfileModal = ({ open, onOpenChange, contactId }: Props) => {
             <div>
               <Card className="shadow-md">
                 <CardHeader>
-                  <CardTitle>Contact Details</CardTitle>
+                  <CardTitle>Customer Contact Details</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div>
@@ -201,7 +201,7 @@ const ContactProfileModal = ({ open, onOpenChange, contactId }: Props) => {
                               <div className="font-medium">{v.code}</div>
                               <div className="text-sm text-muted-foreground">{v.voucher_rule?.name ?? "—"}</div>
                             </div>
-                            <div className="text-sm text-muted-foreground">{v.status}</div>
+                            <div className="text-sm text-muted-foreground">{v.status === "active" ? "Issued" : v.status ? v.status.charAt(0).toUpperCase() + v.status.slice(1) : "—"}</div>
                           </div>
                         ))}
                       </div>
@@ -212,7 +212,7 @@ const ContactProfileModal = ({ open, onOpenChange, contactId }: Props) => {
             </div>
           </div>
         ) : (
-          <div className="text-center py-8">Contact not found or you don't have access.</div>
+          <div className="text-center py-8">Customer Contact not found or you don't have access.</div>
         )}
       </DialogContent>
     </Dialog>

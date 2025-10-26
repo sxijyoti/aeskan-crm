@@ -54,7 +54,7 @@ const RecordPurchase = ({ onSaved }: Props) => {
       const error = res.error;
       if (error) {
         console.error(error);
-        toast.error("Failed to load contacts");
+        toast.error("Failed to load customer contacts");
         if (page === 0) setContacts([]);
         setHasMoreContacts(false);
       } else {
@@ -76,7 +76,7 @@ const RecordPurchase = ({ onSaved }: Props) => {
     if (!user || !profile) return;
 
     if (!contactId) {
-      toast.error("Please select a contact");
+      toast.error("Please select a customer contact");
       return;
     }
     if (!item.trim()) {
@@ -101,12 +101,13 @@ const RecordPurchase = ({ onSaved }: Props) => {
     setLoading(true);
 
     try {
+      // store total amount = unit price * quantity
       const toInsert: Database["public"]["Tables"]["purchases"]["Insert"] = {
         company_id: profile.company_id,
         contact_id: contactId,
         created_by: user.id,
         item: item.trim(),
-        amount: amt,
+        amount: amt * qty,
         quantity: qty,
         purchase_date: date,
       };
@@ -131,20 +132,20 @@ const RecordPurchase = ({ onSaved }: Props) => {
     <form onSubmit={handleSubmit} className="grid gap-3 md:grid-cols-12">
       {/* Row 1: Contact (left) and Item (right) */}
       <div className="md:col-span-8">
-        <Label htmlFor="contact" className="text-sm font-medium">Contact</Label>
+        <Label htmlFor="contact" className="text-sm font-medium">Customer Contact</Label>
         <select
           id="contact"
           className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           value={contactId}
           onChange={(e) => setContactId(e.target.value)}
         >
-          <option value="" disabled>Select a contact</option>
+          <option value="" disabled>Select a customer contact</option>
           {contacts.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
         <div className="mt-2 text-xs text-muted-foreground flex items-center justify-between">
-          <div>{contacts.length === 0 ? "No contacts" : `${contacts.length} shown`}</div>
+          <div>{contacts.length === 0 ? "No customer contacts" : `${contacts.length} shown`}</div>
           <div>{hasMoreContacts && (
             <Button size="sm" onClick={() => setContactPage((p) => p + 1)} disabled={loadingContacts}>
               {loadingContacts ? "Loading..." : "Load more"}

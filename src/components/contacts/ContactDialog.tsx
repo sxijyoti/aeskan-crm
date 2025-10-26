@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Trash2 } from "lucide-react";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -36,6 +37,7 @@ const ContactDialog = ({ open, onClose, contact }: ContactDialogProps) => {
     phone: "",
     address: "",
   });
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (contact) {
@@ -111,7 +113,7 @@ const ContactDialog = ({ open, onClose, contact }: ContactDialogProps) => {
           .eq("id", contact.id);
 
         if (error) throw error;
-        toast.success("Contact updated successfully");
+  toast.success("Customer contact updated successfully");
       } else {
         const toInsert: Database["public"]["Tables"]["contacts"]["Insert"] = {
           company_id: profile.company_id,
@@ -127,7 +129,7 @@ const ContactDialog = ({ open, onClose, contact }: ContactDialogProps) => {
         const { error } = await supabase.from("contacts").insert(toInsert);
 
         if (error) throw error;
-        toast.success("Contact created successfully");
+  toast.success("Customer contact created successfully");
       }
 
       onClose(true);
@@ -145,26 +147,20 @@ const ContactDialog = ({ open, onClose, contact }: ContactDialogProps) => {
   const handleDelete = async () => {
     // allow delete for admins or owners/assignees
     if (!contact || !(isAdmin || contact.created_by === user?.id || contact.assigned_user_id === user?.id)) return;
+    // deletion is handled via ConfirmDialog (see UI render)
+  };
 
-    if (!confirm("Are you sure you want to delete this contact?")) return;
-
+  const handleDeleteConfirmed = async () => {
+    if (!contact) return;
     setLoading(true);
-
     try {
-      const { error } = await supabase
-        .from("contacts")
-        .delete()
-        .eq("id", contact.id);
-
+      const { error } = await supabase.from("contacts").delete().eq("id", contact.id);
       if (error) throw error;
-      toast.success("Contact deleted successfully");
+      toast.success("Customer contact deleted successfully");
       onClose(true);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        toast.error(error.message);
-      } else {
-        toast.error(String(error));
-      }
+    } catch (err: unknown) {
+      if (err instanceof Error) toast.error(err.message);
+      else toast.error(String(err));
     } finally {
       setLoading(false);
     }
@@ -174,9 +170,9 @@ const ContactDialog = ({ open, onClose, contact }: ContactDialogProps) => {
     <Dialog open={open} onOpenChange={() => onClose()}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{contact ? "Edit Contact" : "Add New Contact"}</DialogTitle>
+          <DialogTitle>{contact ? "Edit Customer Contact" : "Add New Customer Contact"}</DialogTitle>
           <DialogDescription>
-            {contact ? "Update contact information" : "Create a new contact in your company"}
+            {contact ? "Update customer contact information" : "Create a new customer contact in your company"}
           </DialogDescription>
         </DialogHeader>
 
@@ -244,7 +240,7 @@ const ContactDialog = ({ open, onClose, contact }: ContactDialogProps) => {
               <Button
                 type="button"
                 variant="destructive"
-                onClick={handleDelete}
+                onClick={() => setConfirmOpen(true)}
                 disabled={loading}
                 className="sm:mr-auto"
               >
@@ -261,6 +257,14 @@ const ContactDialog = ({ open, onClose, contact }: ContactDialogProps) => {
             </Button>
           </DialogFooter>
         </form>
+        <ConfirmDialog
+          open={confirmOpen}
+          onOpenChange={(open) => setConfirmOpen(open)}
+          title="Delete customer contact"
+          description="Are you sure you want to delete this customer contact? This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={handleDeleteConfirmed}
+        />
       </DialogContent>
     </Dialog>
   );

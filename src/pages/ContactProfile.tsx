@@ -9,8 +9,11 @@ import { toast } from "sonner";
 import { formatINR } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Edit2, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import PurchaseDialog from "@/components/purchases/PurchaseDialog";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 type Contact = {
   id: string;
@@ -52,9 +55,26 @@ const ContactProfile = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalsAllowed, setTotalsAllowed] = useState(false);
+  const [assignedUserName, setAssignedUserName] = useState<string | null>(null);
 
   // purchase form state
   const [item, setItem] = useState("");
+
+  const formatVoucherStatus = (s: string | undefined | null) => {
+    if (!s) return "—";
+    switch (s) {
+      case "active":
+        return "Issued";
+      case "redeemed":
+        return "Redeemed";
+      case "expired":
+        return "Expired";
+      default:
+        return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+  };
+  const [confirmPurchaseOpen, setConfirmPurchaseOpen] = useState(false);
+  const [purchaseToDelete, setPurchaseToDelete] = useState<string | null>(null);
   const [amount, setAmount] = useState<number | "">("");
   const [quantity, setQuantity] = useState<number | "">(1);
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
@@ -79,6 +99,27 @@ const ContactProfile = () => {
       // Role-based access: non-admin users can only see totals for assigned contacts
       const allowed = Boolean(isAdmin || (user && contactRow && contactRow.assigned_user_id === user.id));
       setTotalsAllowed(allowed);
+
+      // if viewer is admin, fetch the assigned user's display name for the details card
+      if (isAdmin && contactRow?.assigned_user_id) {
+        try {
+          const { data: profileData, error: profileErr } = await supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", contactRow.assigned_user_id)
+            .single();
+          if (!profileErr && profileData) {
+            setAssignedUserName((profileData as { full_name?: string | null }).full_name ?? null);
+          } else {
+            setAssignedUserName(null);
+          }
+        } catch (err) {
+          console.error(err);
+          setAssignedUserName(null);
+        }
+      } else {
+        setAssignedUserName(null);
+      }
 
       let purchasesData: Purchase[] = [];
       if (allowed) {
@@ -109,7 +150,7 @@ const ContactProfile = () => {
     } catch (error: unknown) {
       if (error instanceof Error) console.error(error);
       else console.error(String(error));
-      toast.error("Failed to load contact or purchases");
+      toast.error("Failed to load customer contact or purchases");
     } finally {
       setLoading(false);
     }
@@ -128,6 +169,8 @@ const ContactProfile = () => {
   const [rulesOptions, setRulesOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [issueLoading, setIssueLoading] = useState(false);
+  const [editingOpen, setEditingOpen] = useState(false);
+  const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
 
   const openIssue = async () => {
     if (!profile) return;
@@ -161,17 +204,18 @@ const ContactProfile = () => {
         contact_id: contact.id,
         issued_by: user.id,
         voucher_rule_id: selectedRuleId,
-        status: "issued",
+        status: "active",
       };
       const { error } = await supabase.from("vouchers").insert(toInsert);
       if (error) throw error;
-      toast.success("Voucher issued to contact");
+    toast.success("Voucher issued to customer contact");
       setIssueOpen(false);
       // refresh vouchers list
       void fetchContactAndPurchases();
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to issue voucher");
+      console.error("issue voucher error:", err);
+      const msg = err && typeof err === "object" && "message" in err ? (err as any).message : String(err);
+      toast.error(msg || "Failed to issue voucher");
     } finally {
       setIssueLoading(false);
     }
@@ -194,7 +238,8 @@ const ContactProfile = () => {
       contact_id: contact.id,
       created_by: user.id,
       item,
-      amount: Number(amount),
+      // store total amount = unit price * quantity
+      amount: (typeof amount === "number" ? amount : Number(amount)) * (typeof quantity === "number" ? quantity : Number(quantity)),
       quantity: typeof quantity === "number" ? quantity : Number(quantity),
       purchase_date: date,
     };
@@ -215,7 +260,7 @@ const ContactProfile = () => {
 
   if (loading) {
     return (
-      <DashboardLayout title="Contact">
+      <DashboardLayout title="Customer Contact">
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -225,14 +270,14 @@ const ContactProfile = () => {
 
   if (!contact) {
     return (
-      <DashboardLayout title="Contact">
-        <div className="text-center py-12">Contact not found or you don't have access.</div>
+      <DashboardLayout title="Customer Contact">
+        <div className="text-center py-12">Customer Contact not found or you don't have access.</div>
       </DashboardLayout>
     );
   }
 
   return (
-    <DashboardLayout title={`Contact: ${contact.name}`}>
+    <DashboardLayout title={`Customer Contact: ${contact.name}`}>
       <div className="mb-4">
         <Button variant="ghost" onClick={() => navigate(-1)} className="mb-2">
           ← Back
@@ -252,6 +297,7 @@ const ContactProfile = () => {
                       <th className="py-2">Item</th>
                       <th className="py-2">Amount</th>
                       <th className="py-2">Date</th>
+                      <th className="py-2 text-right"> </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -260,12 +306,22 @@ const ContactProfile = () => {
                         <td className="py-2">{p.item}</td>
                         <td className="py-2">{formatINR(p.amount)}</td>
                         <td className="py-2">{new Date(p.purchase_date).toLocaleDateString()}</td>
+                        <td className="py-2 text-right">
+                          <div className="inline-flex items-center gap-2">
+                            <Button size="sm" variant="ghost" onClick={async (e) => { e.stopPropagation(); setEditingPurchaseId(p.id); setEditingOpen(true); }} aria-label="Edit purchase">
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setPurchaseToDelete(p.id); setConfirmPurchaseOpen(true); }} aria-label="Delete purchase">
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                     {purchases.length === 0 && (
                       <tr>
-                        <td colSpan={3} className="py-8 text-center text-muted-foreground">
-                          No purchases recorded for this contact.
+                        <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                          No purchases recorded for this customer contact.
                         </td>
                       </tr>
                     )}
@@ -274,6 +330,30 @@ const ContactProfile = () => {
               </div>
             </CardContent>
           </Card>
+
+            <PurchaseDialog open={editingOpen} onOpenChange={(open) => { setEditingOpen(open); if (!open) setEditingPurchaseId(null); }} purchaseId={editingPurchaseId} onSaved={() => void fetchContactAndPurchases()} />
+
+            <ConfirmDialog
+              open={confirmPurchaseOpen}
+              onOpenChange={(open) => setConfirmPurchaseOpen(open)}
+              title="Delete purchase"
+              description="Are you sure you want to delete this purchase? This action cannot be undone."
+              confirmLabel="Delete"
+              onConfirm={async () => {
+                if (!purchaseToDelete) return;
+                try {
+                  const { error } = await supabase.from("purchases").delete().eq("id", purchaseToDelete);
+                  if (error) throw error;
+                  toast.success("Purchase deleted");
+                  void fetchContactAndPurchases();
+                } catch (err) {
+                  console.error(err);
+                  toast.error("Failed to delete purchase");
+                } finally {
+                  setPurchaseToDelete(null);
+                }
+              }}
+            />
 
           <Card className="shadow-md">
             <CardHeader>
@@ -289,6 +369,15 @@ const ContactProfile = () => {
                   step="0.01"
                   value={amount === "" ? "" : String(amount)}
                   onChange={(e) => setAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                  required
+                />
+                <Input
+                  placeholder="Quantity"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={quantity === "" ? "" : String(quantity)}
+                  onChange={(e) => setQuantity(e.target.value === "" ? "" : Number(e.target.value))}
                   required
                 />
                 <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
@@ -309,14 +398,14 @@ const ContactProfile = () => {
               {totalsAllowed ? (
                 <div className="text-3xl font-bold text-primary">{formatINR(totalSpend)}</div>
               ) : (
-                <div className="text-sm text-muted-foreground">You are not authorised to view total spend for this contact.</div>
+                <div className="text-sm text-muted-foreground">You are not authorised to view total spend for this customer contact.</div>
               )}
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
             <CardHeader>
-              <CardTitle>Contact Details</CardTitle>
+              <CardTitle>Customer Contact Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div>
@@ -339,6 +428,12 @@ const ContactProfile = () => {
                 <div>
                   <div className="text-sm text-muted-foreground">Address</div>
                   <div className="font-medium">{contact.address}</div>
+                </div>
+              )}
+              {isAdmin && (
+                <div>
+                  <div className="text-sm text-muted-foreground">Assigned To</div>
+                  <div className="font-medium">{assignedUserName ?? (contact.assigned_user_id ? contact.assigned_user_id : <span className="text-muted-foreground">—</span>)}</div>
                 </div>
               )}
               {canIssueVoucher && (

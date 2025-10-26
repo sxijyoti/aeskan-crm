@@ -55,7 +55,7 @@ const DashboardLayout = ({ children, title }: DashboardLayoutProps) => {
 
                     <nav className="flex flex-col gap-2 pt-6">
                       <Link to="/contacts">
-                        <Button variant="ghost" className="justify-start text-white hover:bg-white/10 rounded-md px-3 py-2">Contacts</Button>
+                        <Button variant="ghost" className="justify-start text-white hover:bg-white/10 rounded-md px-3 py-2">Customer Contacts</Button>
                       </Link>
                       <Link to="/purchases">
                         <Button variant="ghost" className="justify-start text-white hover:bg-white/10 rounded-md px-3 py-2">Purchases</Button>

@@ -11,6 +11,8 @@ import { Loader2, Plus, Edit2, Trash2 } from "lucide-react";
 import { DialogTrigger } from "@/components/ui/dialog";
 import { formatINR } from "@/lib/utils";
 import { toast } from "sonner";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
+import VoucherDialog from "./VoucherDialog";
 
 type VoucherRuleRow = Database["public"]["Tables"]["voucher_rules"]["Row"];
 
@@ -31,6 +33,10 @@ const VoucherRulesList = () => {
     max_discount_amount: null,
     is_active: true,
   });
+  const [confirmRuleOpen, setConfirmRuleOpen] = useState(false);
+  const [ruleToDelete, setRuleToDelete] = useState<string | null>(null);
+  const [editingVoucherOpen, setEditingVoucherOpen] = useState(false);
+  const [voucherToEdit, setVoucherToEdit] = useState<string | null>(null);
 
   const fetchRules = useCallback(async () => {
     if (!profile) return;
@@ -130,7 +136,12 @@ const VoucherRulesList = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this voucher rule?")) return;
+    // open confirm dialog to perform deletion
+    setRuleToDelete(id);
+    setConfirmRuleOpen(true);
+  };
+
+  const handleDeleteConfirmed = async (id: string) => {
     setLoading(true);
     try {
       const { error } = await supabase.from("voucher_rules").delete().eq("id", id);
@@ -142,6 +153,7 @@ const VoucherRulesList = () => {
       toast.error("Failed to delete voucher rule");
     } finally {
       setLoading(false);
+      setRuleToDelete(null);
     }
   };
 
@@ -183,12 +195,16 @@ const VoucherRulesList = () => {
 
   // recent vouchers list
   const [vouchersList, setVouchersList] = useState<Array<{ id: string; code: string; status: string; issued_at?: string | null; contact?: { id: string; name?: string } | null; voucher_rule?: { name?: string } | null }>>([]);
+  const [confirmVoucherOpen, setConfirmVoucherOpen] = useState(false);
+  const [voucherToDelete, setVoucherToDelete] = useState<string | null>(null);
+
   const fetchVouchers = async () => {
     if (!profile) return;
     try {
       const { data, error } = await supabase
         .from("vouchers")
-        .select("id, code, status, issued_at, contacts(id, name), voucher_rules(name)")
+        // alias relations so UI can access `contact` and `voucher_rule` keys
+        .select("id, code, status, issued_at, contact:contacts(id, name), voucher_rule:voucher_rules(name)")
         .eq("company_id", profile.company_id)
         .order("issued_at", { ascending: false })
         .limit(200);
@@ -232,9 +248,9 @@ const VoucherRulesList = () => {
       const { data, error } = await query;
       if (error) throw error;
       setContactsOptions((data as Array<{ id: string; name: string }>) || []);
-    } catch (err) {
+      } catch (err) {
       console.error(err);
-      toast.error("Failed to load contacts for voucher issuance");
+      toast.error("Failed to load customer contacts for voucher issuance");
       setContactsOptions([]);
     }
   };
@@ -251,7 +267,7 @@ const VoucherRulesList = () => {
         contact_id: selectedContact,
         issued_by: user.id,
         voucher_rule_id: issueRule.id,
-        status: "issued",
+        status: "active",
       } as Database["public"]["Tables"]["vouchers"]["Insert"]];
 
       const { error } = await supabase.from("vouchers").insert(toInsert);
@@ -259,8 +275,9 @@ const VoucherRulesList = () => {
       toast.success("Voucher issued");
       setIssueOpen(false);
     } catch (err: unknown) {
-      console.error(err);
-      toast.error("Failed to issue voucher");
+      console.error("issue voucher error:", err);
+      const msg = err && typeof err === "object" && "message" in err ? (err as any).message : String(err);
+      toast.error(msg || "Failed to issue voucher");
     } finally {
       setIssueLoading(false);
     }
@@ -316,7 +333,7 @@ const VoucherRulesList = () => {
                         <Button variant="outline" size="sm" className="h-8 w-8 p-0 flex items-center justify-center" onClick={() => openEdit(r as VoucherRuleRow)} aria-label={`Edit ${r.name}`}>
                           <Edit2 className="h-4 w-4" />
                         </Button>
-                        <Button variant="destructive" size="sm" className="h-8 w-8 p-0 flex items-center justify-center" onClick={() => handleDelete(r.id)} aria-label={`Delete ${r.name}`}>
+                        <Button variant="destructive" size="sm" className="h-8 w-8 p-0 flex items-center justify-center" onClick={(e) => { e.stopPropagation(); setRuleToDelete(r.id); setConfirmRuleOpen(true); }} aria-label={`Delete ${r.name}`}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -348,6 +365,41 @@ const VoucherRulesList = () => {
           </div>
         )}
       </CardContent>
+      <ConfirmDialog
+        open={confirmVoucherOpen}
+        onOpenChange={(open) => setConfirmVoucherOpen(open)}
+        title="Delete voucher"
+        description="Are you sure you want to delete this voucher? This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (!voucherToDelete) return;
+          setConfirmVoucherOpen(false);
+          try {
+            const { error } = await supabase.from("vouchers").delete().eq("id", voucherToDelete);
+            if (error) throw error;
+            toast.success("Voucher deleted");
+            void fetchVouchers();
+          } catch (err) {
+            console.error("delete voucher error:", err);
+            toast.error("Failed to delete voucher");
+          } finally {
+            setVoucherToDelete(null);
+          }
+        }}
+      />
+      <VoucherDialog open={editingVoucherOpen} onOpenChange={(open) => { setEditingVoucherOpen(open); if (!open) setVoucherToEdit(null); }} voucherId={voucherToEdit} onSaved={() => void fetchVouchers()} />
+
+      <ConfirmDialog
+        open={confirmRuleOpen}
+        onOpenChange={(open) => setConfirmRuleOpen(open)}
+        title="Delete voucher rule"
+        description="Are you sure you want to delete this voucher rule? This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (!ruleToDelete) return;
+          await handleDeleteConfirmed(ruleToDelete);
+        }}
+      />
 
       {/* Separate Issue Vouchers section */}
       {canIssue && (
@@ -368,9 +420,9 @@ const VoucherRulesList = () => {
               </div>
 
               <div className="flex-1">
-                <Label htmlFor="contacts">Contacts</Label>
+                <Label htmlFor="contacts">Customer Contacts</Label>
                 <select id="contacts" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm h-10" value={selectedContact ?? ""} onChange={(e) => setSelectedContact(e.target.value)}>
-                  <option value="">Select a contact</option>
+                  <option value="">Select a customer contact</option>
                   {contactsOptions.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -391,9 +443,10 @@ const VoucherRulesList = () => {
                     <tr className="text-left text-sm text-muted-foreground">
                       <th className="py-2">Code</th>
                       <th className="py-2">Rule</th>
-                      <th className="py-2">Contact</th>
+                      <th className="py-2">Customer Contact</th>
                       <th className="py-2">Issued At</th>
-                      <th className="py-2">Status</th>
+                          <th className="py-2">Status</th>
+                          {isAdmin && <th className="py-2 text-right">Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -401,9 +454,21 @@ const VoucherRulesList = () => {
                       <tr key={v.id} className="border-t hover:bg-muted/5">
                         <td className="py-2 font-mono">{v.code}</td>
                         <td className="py-2">{v.voucher_rule?.name ?? "—"}</td>
-                        <td className="py-2">{v.contact?.name ?? "—"}</td>
+                            <td className="py-2">{v.contact?.name ?? "—"}</td>
                         <td className="py-2">{v.issued_at ? new Date(v.issued_at).toLocaleString() : "-"}</td>
-                        <td className="py-2">{v.status}</td>
+                            <td className="py-2">{v.status === "active" ? "Issued" : v.status ? v.status.charAt(0).toUpperCase() + v.status.slice(1) : "—"}</td>
+                            {isAdmin && (
+                              <td className="py-2 text-right">
+                                <div className="inline-flex items-center justify-end gap-2">
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex items-center justify-center" onClick={() => { setVoucherToEdit(v.id); setEditingVoucherOpen(true); }} aria-label={`Edit voucher ${v.code}`}>
+                                    <Edit2 className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex items-center justify-center" onClick={(e) => { e.stopPropagation(); setVoucherToDelete(v.id); setConfirmVoucherOpen(true); }} aria-label={`Delete voucher ${v.code}`}>
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </div>
+                              </td>
+                            )}
                       </tr>
                     ))}
                     {vouchersList.length === 0 && (

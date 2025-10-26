@@ -3,9 +3,12 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
-import { Loader2, ChevronDown, ChevronUp, Search } from "lucide-react";
+import { Loader2, ChevronDown, ChevronUp, Search, Edit2, Trash2 } from "lucide-react";
 import { formatINR } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import PurchaseDialog from "@/components/purchases/PurchaseDialog";
+import { toast } from "sonner";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 import RecordPurchase from "@/components/purchases/RecordPurchase";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -29,6 +32,10 @@ const PurchasesPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "amount">("date");
   const [sortAsc, setSortAsc] = useState(false);
+  const [editingOpen, setEditingOpen] = useState(false);
+  const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
+  const [confirmPurchaseOpen, setConfirmPurchaseOpen] = useState(false);
+  const [purchaseToDelete, setPurchaseToDelete] = useState<string | null>(null);
 
   const fetchPurchases = useCallback(async (term?: string) => {
     if (!profile) return;
@@ -152,6 +159,7 @@ const PurchasesPage = () => {
                       {sortBy === "date" ? (sortAsc ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />) : null}
                     </button>
                   </th>
+                  <th className="px-4 py-3 text-right"> </th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -161,11 +169,21 @@ const PurchasesPage = () => {
                     <td className="px-4 py-3">{p.item}</td>
                     <td className="px-4 py-3">{formatINR(p.amount)}</td>
                     <td className="px-4 py-3">{new Date(p.purchase_date).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => { setEditingPurchaseId(p.id); setEditingOpen(true); }} aria-label="Edit purchase">
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setPurchaseToDelete(p.id); setConfirmPurchaseOpen(true); }} aria-label="Delete purchase">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {purchases.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-8 text-center text-muted-foreground">No purchases found</td>
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground">No purchases found</td>
                   </tr>
                 )}
               </tbody>
@@ -173,6 +191,28 @@ const PurchasesPage = () => {
           )}
         </div>
       </div>
+      <PurchaseDialog open={editingOpen} onOpenChange={(open) => { setEditingOpen(open); if (!open) setEditingPurchaseId(null); }} purchaseId={editingPurchaseId} onSaved={() => void fetchPurchases()} />
+      <ConfirmDialog
+        open={confirmPurchaseOpen}
+        onOpenChange={(open) => setConfirmPurchaseOpen(open)}
+        title="Delete purchase"
+        description="Are you sure you want to delete this purchase? This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (!purchaseToDelete) return;
+          try {
+            const { error } = await supabase.from("purchases").delete().eq("id", purchaseToDelete);
+            if (error) throw error;
+            toast.success("Purchase deleted");
+            void fetchPurchases();
+          } catch (err) {
+            console.error(err);
+            toast.error("Failed to delete purchase");
+          } finally {
+            setPurchaseToDelete(null);
+          }
+        }}
+      />
     </DashboardLayout>
   );
 };

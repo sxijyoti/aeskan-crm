@@ -52,6 +52,26 @@ const ReportsDashboard = () => {
   const purchases = (purchasesRes.data as Array<{ id: string; amount?: number | string; item?: string | null; purchase_date?: string | null; contacts?: { id?: string; name?: string | null; created_by?: string | null; assigned_user_id?: string | null } | null }>) || [];
         const profiles = (profilesRes.data as Array<{ id: string; full_name?: string | null }>) || [];
 
+        // fetch roles for the fetched profiles to exclude admin accounts from per-user stats
+        const profileIds = profiles.map((p) => p.id);
+        let adminIds = new Set<string>();
+        if (profileIds.length > 0) {
+          try {
+            const { data: rolesData, error: rolesErr } = await supabase
+              .from("user_roles")
+              .select("user_id, role")
+              .in("user_id", profileIds)
+              .eq("role", "admin");
+            if (!rolesErr && rolesData) {
+              (rolesData as Array<{ user_id: string; role: string }>).forEach((r) => {
+                if (r.role === "admin") adminIds.add(r.user_id);
+              });
+            }
+          } catch (err) {
+            console.error("Failed to load user roles for reports", err);
+          }
+        }
+
         // Company totals
         const totalContacts = contacts.length;
         const totalPurchases = purchases.length;
@@ -60,7 +80,9 @@ const ReportsDashboard = () => {
         setStats({ totalContacts, totalPurchases, totalRevenue });
 
         // Build per-user stats
-        const perUser = profiles.map((prof) => {
+        // exclude admin profiles from per-user reporting
+        const visibleProfiles = profiles.filter((prof) => !adminIds.has(prof.id));
+        const perUser = visibleProfiles.map((prof) => {
           const userContacts = contacts.filter((c) => c.created_by === prof.id || c.assigned_user_id === prof.id);
           const userPurchases = purchases.filter((p) => p.contacts && (p.contacts.created_by === prof.id || p.contacts.assigned_user_id === prof.id));
           const revenue = userPurchases.reduce((s, p) => s + Number(p.amount ?? 0), 0);
@@ -68,7 +90,8 @@ const ReportsDashboard = () => {
         });
 
   setUserStats(perUser.sort((a, b) => b.revenue - a.revenue));
-  setProfilesList(profiles);
+  // expose only non-admin profiles in the profiles list used for per-user drilldowns
+  setProfilesList(visibleProfiles.map((p) => ({ id: p.id, full_name: p.full_name })) as Array<{ id: string; full_name?: string | null }>);
   // ensure every contact has a name (avoid TypeScript required-name mismatch)
   setContactsList(contacts.map((c) => ({ ...c, name: c.name ?? "(no name)" })));
   setPurchasesList(purchases);
@@ -106,14 +129,14 @@ const ReportsDashboard = () => {
       <div className="grid gap-4 md:grid-cols-3">
       <Card className="shadow-md">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Contacts</CardTitle>
+          <CardTitle className="text-sm font-medium">Total Customer Contacts</CardTitle>
           <div className="p-2 bg-primary/10 rounded-lg">
             <Users className="h-4 w-4 text-primary" />
           </div>
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{stats.totalContacts}</div>
-          <p className="text-xs text-muted-foreground mt-1">All company contacts</p>
+          <p className="text-xs text-muted-foreground mt-1">All company customer contacts</p>
         </CardContent>
       </Card>
 
@@ -153,7 +176,7 @@ const ReportsDashboard = () => {
               <thead>
                 <tr className="text-sm text-muted-foreground">
                   <th className="px-4 py-2 text-left">User</th>
-                  <th className="px-4 py-2 text-left">Contacts</th>
+                  <th className="px-4 py-2 text-left">Customer Contacts</th>
                   <th className="px-4 py-2 text-left">Purchases</th>
                   <th className="px-4 py-2 text-left">Revenue</th>
                   <th className="px-4 py-2 text-left">Actions</th>
@@ -202,7 +225,7 @@ const ReportsDashboard = () => {
                       </div>
 
                       <div>
-                        <h4 className="font-semibold">Contacts ({userContacts.length})</h4>
+                        <h4 className="font-semibold">Customer Contacts ({userContacts.length})</h4>
                         <ul className="list-disc pl-5 mt-2 text-sm text-muted-foreground">
                           {userContacts.slice(0, 20).map((c) => (
                             <li key={c.id}>{c.name}</li>
@@ -243,16 +266,16 @@ const ReportsDashboard = () => {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           <div className="bg-card p-4 rounded-md shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">Your Contacts</h3>
-            <ul className="list-disc pl-5 text-sm text-muted-foreground">
-              {contactsList.filter((c) => c.created_by === (user?.id) || c.assigned_user_id === (user?.id)).map((c) => (
-                <li key={c.id}>{c.name}</li>
-              ))}
-            </ul>
+            <h3 className="text-lg font-semibold mb-2">Your Customer Contacts</h3>
+              <ul className="list-disc pl-5 text-sm text-muted-foreground">
+                {contactsList.filter((c) => c.created_by === (user?.id) || c.assigned_user_id === (user?.id)).map((c) => (
+                  <li key={c.id}>{c.name}</li>
+                ))}
+              </ul>
           </div>
 
           <div className="bg-card p-4 rounded-md shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">Your Recent Purchases</h3>
+            <h3 className="text-lg font-semibold mb-2">Recent Purchases</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>

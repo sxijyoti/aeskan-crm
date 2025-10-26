@@ -17,7 +17,7 @@ const Index = () => {
   const features = [
     {
       icon: Users,
-      title: "Contact Management",
+      title: "Customer Contact Management",
       description: "Organize and track all your customer relationships in one place",
     },
     {

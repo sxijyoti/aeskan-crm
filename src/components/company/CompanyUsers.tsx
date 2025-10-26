@@ -40,7 +40,8 @@ const CompanyUsers = () => {
         }),
       );
 
-      setUsers(withRoles);
+      // hide admin profiles from the company users listing per request
+      setUsers(withRoles.filter((u) => u.role !== "admin"));
     } catch (err: unknown) {
       console.error(err);
       toast.error("Failed to load company users");

@@ -2,15 +2,27 @@ import { useState, useEffect, createContext, useContext, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+
+interface Profile {
+  id: string;
+  company_id: string;
+  email: string;
+  full_name: string | null;
+}
+
+interface UserRole {
+  role: "admin" | "user";
+}
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
+  profile: Profile | null;
+  userRole: UserRole | null;
+  isAdmin: boolean;
   loading: boolean;
-  userRole: string | null;
-  signUp: (email: string, password: string, name: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string, companyName: string) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -19,12 +31,36 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+    
+    if (data) {
+      setProfile(data);
+    }
+  };
+
+  const fetchUserRole = async (userId: string) => {
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .single();
+    
+    if (data) {
+      setUserRole(data);
+    }
+  };
+
   useEffect(() => {
-    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
@@ -32,19 +68,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         if (session?.user) {
           setTimeout(() => {
+            fetchProfile(session.user.id);
             fetchUserRole(session.user.id);
           }, 0);
         } else {
+          setProfile(null);
           setUserRole(null);
         }
       }
     );
 
-    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
+        fetchProfile(session.user.id);
         fetchUserRole(session.user.id);
       }
       setLoading(false);
@@ -53,83 +92,57 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserRole = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId)
-        .single();
-
-      if (error) throw error;
-      setUserRole(data?.role || "user");
-    } catch (error) {
-      console.error("Error fetching user role:", error);
-      setUserRole("user");
-    }
-  };
-
-  const signUp = async (email: string, password: string, name: string) => {
-    try {
-      const redirectUrl = `${window.location.origin}/`;
-      
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            name,
-          },
+  const signUp = async (email: string, password: string, fullName: string, companyName: string): Promise<{ error: Error | null }> => {
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          full_name: fullName,
+          company_name: companyName,
         },
-      });
-
-      if (error) throw error;
-      
-      toast.success("Account created successfully! Please check your email to verify.");
-      navigate("/auth");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error(message || "Failed to sign up");
-      throw error;
-    }
+      },
+    });
+    
+    return { error };
   };
 
-  const signIn = async (email: string, password: string) => {
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-      
-      toast.success("Signed in successfully!");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error(message || "Failed to sign in");
-      throw error;
+  const signIn = async (email: string, password: string): Promise<{ error: Error | null }> => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    
+    if (!error) {
+      navigate("/dashboard");
     }
+    
+    return { error };
   };
 
   const signOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      
-      setUserRole(null);
-      toast.success("Signed out successfully!");
-      navigate("/auth");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error(message || "Failed to sign out");
-      throw error;
-    }
+    await supabase.auth.signOut();
+    navigate("/auth");
   };
+
+  const isAdmin = userRole?.role === "admin";
 
   return (
     <AuthContext.Provider
-      value={{ user, session, loading, userRole, signUp, signIn, signOut }}
+      value={{
+        user,
+        session,
+        profile,
+        userRole,
+        isAdmin,
+        loading,
+        signUp,
+        signIn,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>

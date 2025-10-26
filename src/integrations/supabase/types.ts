@@ -14,89 +14,307 @@ export type Database = {
   }
   public: {
     Tables: {
+      companies: {
+        Row: {
+          created_at: string
+          id: string
+          industry: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          industry?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          industry?: string | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           address: string | null
+          assigned_user_id: string | null
+          company_id: string
           created_at: string
+          created_by: string
           email: string | null
           id: string
           name: string
           phone: string | null
           updated_at: string
-          user_id: string
         }
         Insert: {
           address?: string | null
+          assigned_user_id?: string | null
+          company_id: string
           created_at?: string
+          created_by: string
           email?: string | null
           id?: string
           name: string
           phone?: string | null
           updated_at?: string
-          user_id: string
         }
         Update: {
           address?: string | null
+          assigned_user_id?: string | null
+          company_id?: string
           created_at?: string
+          created_by?: string
           email?: string | null
           id?: string
           name?: string
           phone?: string | null
           updated_at?: string
-          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
+          company_id: string
           created_at: string
           email: string
+          full_name: string | null
           id: string
-          name: string | null
           updated_at: string
         }
         Insert: {
+          company_id: string
           created_at?: string
           email: string
+          full_name?: string | null
           id: string
-          name?: string | null
           updated_at?: string
         }
         Update: {
+          company_id?: string
           created_at?: string
           email?: string
+          full_name?: string | null
           id?: string
-          name?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchases: {
+        Row: {
+          amount: number
+          company_id: string
+          contact_id: string
+          created_at: string
+          created_by: string
+          id: string
+          item: string
+          quantity: number
+          purchase_date: string
+        }
+        Insert: {
+          amount: number
+          company_id: string
+          contact_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          item: string
+          quantity?: number
+          purchase_date?: string
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          contact_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          item?: string
+          quantity?: number
+          purchase_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchases_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchases_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
-          created_at: string
           id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
-          created_at?: string
           id?: string
-          role?: Database["public"]["Enums"]["app_role"]
+          role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
-          created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
         Relationships: []
+      }
+      voucher_rules: {
+        Row: {
+          company_id: string
+          created_at: string
+          description: string | null
+          discount_type: string
+          discount_value: number
+          id: string
+          is_active: boolean | null
+          max_discount_amount: number | null
+          min_purchase_amount: number | null
+          name: string
+          updated_at: string
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          description?: string | null
+          discount_type: string
+          discount_value: number
+          id?: string
+          is_active?: boolean | null
+          max_discount_amount?: number | null
+          min_purchase_amount?: number | null
+          name: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          description?: string | null
+          discount_type?: string
+          discount_value?: number
+          id?: string
+          is_active?: boolean | null
+          max_discount_amount?: number | null
+          min_purchase_amount?: number | null
+          name?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voucher_rules_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vouchers: {
+        Row: {
+          code: string
+          company_id: string
+          contact_id: string
+          created_at: string
+          id: string
+          issued_at: string
+          issued_by: string
+          redeemed_at: string | null
+          redeemed_by: string | null
+          status: string
+          voucher_rule_id: string
+        }
+        Insert: {
+          code: string
+          company_id: string
+          contact_id: string
+          created_at?: string
+          id?: string
+          issued_at?: string
+          issued_by: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          status?: string
+          voucher_rule_id: string
+        }
+        Update: {
+          code?: string
+          company_id?: string
+          contact_id?: string
+          created_at?: string
+          id?: string
+          issued_at?: string
+          issued_by?: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          status?: string
+          voucher_rule_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vouchers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vouchers_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vouchers_voucher_rule_id_fkey"
+            columns: ["voucher_rule_id"]
+            isOneToOne: false
+            referencedRelation: "voucher_rules"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      get_user_company_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
